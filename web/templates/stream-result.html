@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>实时分析结果</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css/github-markdown.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/styles/github.min.css">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background-color: #f8f9fa;
+            padding: 20px 0;
+        }
+        .main-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .result-card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+        .markdown-body {
+            box-sizing: border-box;
+            min-width: 200px;
+            max-width: 100%;
+            margin: 0 auto;
+            background-color: white;
+            color: #24292e;
+        }
+        .cursor {
+            display: inline-block;
+            width: 10px;
+            height: 20px;
+            background-color: #000;
+            animation: blink 1s infinite;
+            margin-bottom: -4px;
+        }
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        .floating-buttons {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .floating-buttons .btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .analysis-info {
+            margin-bottom: 20px;
+            padding: 10px 15px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <div class="result-header">
+            <h1>实时分析结果</h1>
+            <div class="action-buttons">
+                <a href="/" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> 返回首页
+                </a>
+            </div>
+        </div>
+        
+        <div class="result-card">
+            <div class="analysis-info">
+                <div><strong>文件名：</strong><span id="originalName">加载中...</span></div>
+                <div><strong>分析类型：</strong><span id="analysisType">加载中...</span></div>
+                <div><strong>AI模型：</strong><span id="modelName">加载中...</span></div>
+            </div>
+            
+            <div id="loadingIndicator" class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-3">分析中，请稍候...</p>
+            </div>
+            
+            <div class="markdown-body" id="streamContent"></div>
+            <span class="cursor" id="typingCursor"></span>
+            
+            <div id="completionActions" style="display: none;" class="mt-4 text-center">
+                <p class="text-success">分析完成！</p>
+                <div class="d-flex justify-content-center gap-3">
+                    <a id="viewResultLink" href="#" class="btn btn-primary">
+                        查看完整结果
+                    </a>
+                    <a id="downloadLink" href="#" class="btn btn-success">
+                        下载 Markdown
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="floating-buttons">
+        <a href="#top" class="btn btn-secondary" title="回到顶部">
+            <i class="bi bi-arrow-up"></i>
+        </a>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@4.2.12/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/highlight.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 配置 marked
+            marked.setOptions({
+                highlight: function(code, lang) {
+                    if (lang && hljs.getLanguage(lang)) {
+                        return hljs.highlight(code, { language: lang }).value;
+                    }
+                    return hljs.highlightAuto(code).value;
+                },
+                breaks: true,
+                gfm: true
+            });
+            
+            // 获取URL参数
+            const urlParams = new URLSearchParams(window.location.search);
+            const streamId = urlParams.get('stream_id');
+            const analysisType = urlParams.get('analysis_type');
+            const originalName = urlParams.get('original_name');
+            const jobRequirements = urlParams.get('job_requirements');
+            const modelName = urlParams.get('model_name');
+            
+            // 显示信息
+            document.getElementById('originalName').textContent = originalName || '未知';
+            document.getElementById('analysisType').textContent = analysisType === 'interview' ? '面试问题' : '通用分析';
+            document.getElementById('modelName').textContent = modelName || 'GPT-4o (默认)';
+            
+            // 准备连接SSE
+            const streamContent = document.getElementById('streamContent');
+            const typingCursor = document.getElementById('typingCursor');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const completionActions = document.getElementById('completionActions');
+            
+            let fullContent = '';
+            let lastRenderTime = 0;
+            const RENDER_INTERVAL = 100; // 渲染间隔，毫秒
+            
+            // 构建SSE URL
+            let sseUrl = `/stream/${streamId}?analysis_type=${analysisType}`;
+            if (jobRequirements) {
+                sseUrl += `&job_requirements=${encodeURIComponent(jobRequirements)}`;
+            }
+            
+            const eventSource = new EventSource(sseUrl);
+            
+            eventSource.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                
+                if (data.chunk) {
+                    // 接收到新的内容块
+                    fullContent += data.chunk;
+                    
+                    // 限制渲染频率
+                    const now = Date.now();
+                    if (now - lastRenderTime > RENDER_INTERVAL) {
+                        streamContent.innerHTML = marked.parse(fullContent);
+                        lastRenderTime = now;
+                        
+                        // 滚动到底部
+                        window.scrollTo(0, document.body.scrollHeight);
+                        
+                        // 隐藏加载指示器
+                        loadingIndicator.style.display = 'none';
+                    }
+                } else if (data.status === 'complete') {
+                    // 分析完成
+                    streamContent.innerHTML = marked.parse(fullContent);
+                    loadingIndicator.style.display = 'none';
+                    typingCursor.style.display = 'none';
+                    completionActions.style.display = 'block';
+                    
+                    // 设置完整结果和下载链接
+                    document.getElementById('viewResultLink').href = `/result/${data.filename}`;
+                    document.getElementById('downloadLink').href = `/download/${data.filename}`;
+                    
+                    // 关闭SSE连接
+                    eventSource.close();
+                } else if (data.status === 'error') {
+                    // 发生错误
+                    streamContent.innerHTML += `<div class="alert alert-danger">${data.message}</div>`;
+                    loadingIndicator.style.display = 'none';
+                    typingCursor.style.display = 'none';
+                    
+                    // 关闭SSE连接
+                    eventSource.close();
+                }
+            };
+            
+            eventSource.onerror = function(event) {
+                console.error('SSE Error:', event);
+                streamContent.innerHTML += '<div class="alert alert-danger">连接错误，请刷新页面重试</div>';
+                loadingIndicator.style.display = 'none';
+                typingCursor.style.display = 'none';
+                eventSource.close();
+            };
+        });
+    </script>
+</body>
+</html> 

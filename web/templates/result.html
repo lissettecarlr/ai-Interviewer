@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>分析结果</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css/github-markdown.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/styles/github.min.css">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background-color: #f8f9fa;
+            padding: 20px 0;
+        }
+        .main-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .result-card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+        .markdown-body {
+            box-sizing: border-box;
+            min-width: 200px;
+            max-width: 100%;
+            margin: 0 auto;
+            background-color: white;
+            color: #24292e;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        .toc {
+            position: sticky;
+            top: 20px;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+            padding-right: 15px;
+        }
+        .toc ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        .toc ul ul {
+            padding-left: 15px;
+        }
+        .toc li {
+            margin-bottom: 8px;
+        }
+        .toc a {
+            color: #495057;
+            text-decoration: none;
+            display: block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+        .toc a:hover {
+            background-color: #e9ecef;
+        }
+        .toc a.active {
+            background-color: #e9ecef;
+            font-weight: bold;
+        }
+        @media (max-width: 768px) {
+            .toc-column {
+                display: none;
+            }
+        }
+        .floating-buttons {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .floating-buttons .btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <div class="result-header">
+            <h1>分析结果</h1>
+            <div class="action-buttons">
+                <a href="/download/{{ filename }}" class="btn btn-success">
+                    <i class="bi bi-download"></i> 下载 Markdown
+                </a>
+                <a href="/" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> 返回首页
+                </a>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-3 toc-column">
+                <div class="result-card">
+                    <h5>目录</h5>
+                    <div class="toc" id="toc"></div>
+                </div>
+            </div>
+            <div class="col-md-9">
+                <div class="result-card">
+                    <div class="markdown-body" id="content"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="floating-buttons d-md-none">
+        <button class="btn btn-primary" id="tocToggle" title="显示目录">
+            <i class="bi bi-list"></i>
+        </button>
+        <a href="#top" class="btn btn-secondary" title="回到顶部">
+            <i class="bi bi-arrow-up"></i>
+        </a>
+    </div>
+    
+    <!-- 移动端目录弹窗 -->
+    <div class="modal fade" id="tocModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">目录</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="mobileToc"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@4.2.12/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/highlight.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 配置 marked
+            marked.setOptions({
+                highlight: function(code, lang) {
+                    if (lang && hljs.getLanguage(lang)) {
+                        return hljs.highlight(code, { language: lang }).value;
+                    }
+                    return hljs.highlightAuto(code).value;
+                },
+                breaks: true,
+                gfm: true
+            });
+            
+            // 修复编译错误，确保正确使用模板变量
+            const content = {{ result_json|safe }};
+            const contentElement = document.getElementById('content');
+            contentElement.innerHTML = marked.parse(content);
+            
+            // 生成目录 - 只保留h2和h3
+            const headings = contentElement.querySelectorAll('h2, h3');
+            const toc = document.getElementById('toc');
+            const mobileToc = document.getElementById('mobileToc');
+            
+            if (headings.length > 0) {
+                const tocHtml = generateToc(headings);
+                toc.innerHTML = tocHtml;
+                mobileToc.innerHTML = tocHtml;
+                
+                // 添加目录项点击事件
+                document.querySelectorAll('.toc a, #mobileToc a').forEach(link => {
+                    link.addEventListener('click', function(e) {
+                        if (this.getAttribute('href').startsWith('#')) {
+                            e.preventDefault();
+                            const targetId = this.getAttribute('href').substring(1);
+                            const targetElement = document.getElementById(targetId);
+                            
+                            if (targetElement) {
+                                // 关闭移动端目录弹窗
+                                const tocModal = bootstrap.Modal.getInstance(document.getElementById('tocModal'));
+                                if (tocModal) {
+                                    tocModal.hide();
+                                }
+                                
+                                // 滚动到目标位置
+                                window.scrollTo({
+                                    top: targetElement.offsetTop - 20,
+                                    behavior: 'smooth'
+                                });
+                                
+                                // 更新活动状态
+                                document.querySelectorAll('.toc a, #mobileToc a').forEach(a => {
+                                    a.classList.remove('active');
+                                });
+                                document.querySelectorAll(`.toc a[href="#${targetId}"], #mobileToc a[href="#${targetId}"]`).forEach(a => {
+                                    a.classList.add('active');
+                                });
+                            }
+                        }
+                    });
+                });
+                
+                // 监听滚动，更新目录活动状态
+                window.addEventListener('scroll', updateTocActiveState);
+            } else {
+                toc.innerHTML = '<p class="text-muted">无目录内容</p>';
+                mobileToc.innerHTML = '<p class="text-muted">无目录内容</p>';
+            }
+            
+            // 移动端目录按钮
+            const tocToggle = document.getElementById('tocToggle');
+            const tocModal = new bootstrap.Modal(document.getElementById('tocModal'));
+            
+            tocToggle.addEventListener('click', function() {
+                tocModal.show();
+            });
+            
+            // 初始化目录活动状态
+            updateTocActiveState();
+            
+            function generateToc(headings) {
+                const tocItems = [];
+                const idMap = {};
+                
+                headings.forEach((heading, index) => {
+                    // 为没有 id 的标题添加 id
+                    if (!heading.id) {
+                        const headingText = heading.textContent.trim();
+                        let id = headingText
+                            .toLowerCase()
+                            .replace(/\s+/g, '-')
+                            .replace(/[^\w\-]+/g, '')
+                            .replace(/\-\-+/g, '-')
+                            .replace(/^-+/, '')
+                            .replace(/-+$/, '');
+                        
+                        // 确保 id 唯一
+                        if (idMap[id]) {
+                            id = `${id}-${idMap[id]++}`;
+                        } else {
+                            idMap[id] = 1;
+                        }
+                        
+                        heading.id = id;
+                    }
+                    
+                    const level = parseInt(heading.tagName.substring(1));
+                    tocItems.push({
+                        id: heading.id,
+                        text: heading.textContent.trim(),
+                        level: level
+                    });
+                });
+                
+                return buildTocHtml(tocItems);
+            }
+            
+            function buildTocHtml(items) {
+                if (items.length === 0) return '';
+                
+                let html = '<ul>';
+                let prevLevel = items[0].level;
+                
+                items.forEach((item, index) => {
+                    if (item.level > prevLevel) {
+                        // 开始新的子列表
+                        html += '<ul>';
+                    } else if (item.level < prevLevel) {
+                        // 结束当前子列表
+                        for (let i = 0; i < prevLevel - item.level; i++) {
+                            html += '</ul></li>';
+                        }
+                    } else if (index > 0) {
+                        // 同级，结束前一个项
+                        html += '</li>';
+                    }
+                    
+                    html += `<li><a href="#${item.id}">${item.text}</a>`;
+                    
+                    prevLevel = item.level;
+                });
+                
+                // 结束所有打开的列表
+                for (let i = 0; i < prevLevel - 1; i++) {
+                    html += '</li></ul>';
+                }
+                
+                html += '</li></ul>';
+                return html;
+            }
+            
+            function updateTocActiveState() {
+                const headings = document.querySelectorAll('h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]');
+                const scrollPosition = window.scrollY + 100; // 添加一些偏移
+                
+                let activeHeading = null;
+                
+                // 找到当前视图中的标题
+                for (let i = 0; i < headings.length; i++) {
+                    if (headings[i].offsetTop <= scrollPosition) {
+                        activeHeading = headings[i];
+                    } else {
+                        break;
+                    }
+                }
+                
+                // 更新活动状态
+                document.querySelectorAll('.toc a, #mobileToc a').forEach(a => {
+                    a.classList.remove('active');
+                });
+                if (activeHeading) {
+                    document.querySelectorAll(`.toc a[href="#${activeHeading.id}"], #mobileToc a[href="#${activeHeading.id}"]`).forEach(a => {
+                        a.classList.add('active');
+                    });
+                }
+            }
+        });
+    </script>
+</body>
+</html> 

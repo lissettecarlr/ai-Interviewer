@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI面试官</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background-color: #f8f9fa;
+            padding-top: 2rem;
+        }
+        .main-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .upload-card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+        .drop-zone {
+            border: 2px dashed #ced4da;
+            border-radius: 8px;
+            padding: 3rem 1rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .drop-zone:hover {
+            background-color: #f8f9fa;
+            border-color: #adb5bd;
+        }
+        .drop-zone.dragover {
+            background-color: #e9ecef;
+            border-color: #6c757d;
+        }
+        .file-input {
+            display: none;
+        }
+        .selected-file {
+            margin-top: 1rem;
+            padding: 0.75rem;
+            background-color: #e9ecef;
+            border-radius: 6px;
+            display: none;
+        }
+        .progress-container {
+            margin-top: 1.5rem;
+            display: none;
+        }
+        .history-card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 2rem;
+        }
+        .history-item {
+            padding: 0.75rem;
+            border-bottom: 1px solid #e9ecef;
+            transition: background-color 0.2s;
+        }
+        .history-item:hover {
+            background-color: #f8f9fa;
+        }
+        .history-item:last-child {
+            border-bottom: none;
+        }
+        .history-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <h1 class="text-center mb-4">简历分析</h1>
+        
+        <div class="upload-card">
+            <h2 class="mb-3">上传简历</h2>
+            
+            <div class="analysis-options mb-3">
+                <h5>分析类型</h5>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="analysisType" id="analysisGeneral" value="general" checked>
+                    <label class="form-check-label" for="analysisGeneral">
+                        通用分析 - 判断是否可以发送面试邀请
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="analysisType" id="analysisInterview" value="interview">
+                    <label class="form-check-label" for="analysisInterview">
+                        面试问题 - 根据简历内容生成针对性面试题
+                    </label>
+                </div>
+            </div>
+            
+            <div class="form-group mb-3">
+                <label for="modelSelect">AI模型</label>
+                <select class="form-control" id="modelSelect">
+                    {% for model in models %}
+                        <option value="{{ model.id }}" {% if model.default %}selected{% endif %}>{{ model.name }}</option>
+                    {% endfor %}
+                </select>
+                <small class="form-text text-muted">高级模型提供更准确的分析，但处理时间可能更长</small>
+            </div>
+            
+            <div class="form-group mb-3">
+                <label for="jobRequirements">岗位需求（可选）</label>
+                <textarea class="form-control" id="jobRequirements" rows="3" placeholder="请输入岗位需求描述，帮助系统生成更有针对性的分析"></textarea>
+            </div>
+            
+            <div class="mb-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="streamOutput" checked>
+                    <label class="form-check-label" for="streamOutput">
+                        实时显示分析结果
+                    </label>
+                </div>
+            </div>
+            
+            <div class="drop-zone" id="dropZone">
+                <p class="mb-2"><i class="bi bi-cloud-upload"></i> 拖放文件到这里或点击上传</p>
+                <p class="text-muted small">支持 PDF 和 DOCX 格式，最大 16MB</p>
+                <input type="file" id="fileInput" class="file-input" accept=".pdf,.docx">
+            </div>
+            
+            <div class="selected-file" id="selectedFile">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span id="fileName"></span>
+                    <button type="button" class="btn-close" id="removeFile" aria-label="Close"></button>
+                </div>
+            </div>
+            
+            <div class="progress-container" id="progressContainer">
+                <div class="d-flex justify-content-between mb-1">
+                    <span>处理中...</span>
+                    <span id="progressText">0%</span>
+                </div>
+                <div class="progress">
+                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                </div>
+                <p class="text-muted small mt-2">分析可能需要几分钟时间，请耐心等待</p>
+            </div>
+            
+            <div class="mt-3 text-center">
+                <button id="uploadBtn" class="btn btn-primary btn-lg px-4" disabled>开始分析</button>
+            </div>
+            
+            <div class="alert mt-3" id="alertBox" style="display: none;"></div>
+        </div>
+        
+        <div class="history-card">
+            <div class="history-title">
+                <h2 class="mb-0">最近分析</h2>
+                <div>
+                    <button id="clearFilesBtn" class="btn btn-outline-danger btn-sm me-2">清空所有文件</button>
+                    <a href="/history" class="btn btn-outline-secondary btn-sm">查看全部</a>
+                </div>
+            </div>
+            <div id="recentResults">
+                <p class="text-center text-muted py-3">加载中...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const dropZone = document.getElementById('dropZone');
+            const fileInput = document.getElementById('fileInput');
+            const selectedFile = document.getElementById('selectedFile');
+            const fileName = document.getElementById('fileName');
+            const removeFile = document.getElementById('removeFile');
+            const uploadBtn = document.getElementById('uploadBtn');
+            const progressContainer = document.getElementById('progressContainer');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            const alertBox = document.getElementById('alertBox');
+            const recentResults = document.getElementById('recentResults');
+            const clearFilesBtn = document.getElementById('clearFilesBtn');
+            
+            // 拖放功能
+            ['dragover', 'dragenter'].forEach(eventName => {
+                dropZone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    dropZone.classList.add('dragover');
+                });
+            });
+            
+            ['dragleave', 'dragend', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    dropZone.classList.remove('dragover');
+                });
+            });
+            
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                if (e.dataTransfer.files.length) {
+                    fileInput.files = e.dataTransfer.files;
+                    handleFileSelect();
+                }
+            });
+            
+            dropZone.addEventListener('click', () => fileInput.click());
+            
+            fileInput.addEventListener('change', handleFileSelect);
+            
+            function handleFileSelect() {
+                const file = fileInput.files[0];
+                if (file) {
+                    fileName.textContent = file.name;
+                    selectedFile.style.display = 'block';
+                    uploadBtn.disabled = false;
+                    
+                    // 检查文件类型
+                    const fileExt = file.name.split('.').pop().toLowerCase();
+                    if (!['pdf', 'docx'].includes(fileExt)) {
+                        showAlert('只支持 PDF 和 DOCX 格式的文件', 'danger');
+                        resetFileInput();
+                        return;
+                    }
+                    
+                    // 检查文件大小
+                    if (file.size > 16 * 1024 * 1024) {
+                        showAlert('文件大小不能超过 16MB', 'danger');
+                        resetFileInput();
+                        return;
+                    }
+                    
+                    hideAlert();
+                }
+            }
+            
+            removeFile.addEventListener('click', resetFileInput);
+            
+            function resetFileInput() {
+                fileInput.value = '';
+                selectedFile.style.display = 'none';
+                uploadBtn.disabled = true;
+            }
+            
+            uploadBtn.addEventListener('click', uploadFile);
+            
+            function uploadFile() {
+                const file = fileInput.files[0];
+                if (!file) return;
+                
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                // 添加分析类型
+                const analysisType = document.querySelector('input[name="analysisType"]:checked').value;
+                formData.append('analysis_type', analysisType);
+                
+                // 添加岗位需求
+                const jobRequirements = document.getElementById('jobRequirements').value;
+                if (jobRequirements) {
+                    formData.append('job_requirements', jobRequirements);
+                }
+                
+                // 添加模型选择
+                const modelName = document.getElementById('modelSelect').value;
+                formData.append('model_name', modelName);
+                
+                // 是否使用流式输出
+                const streamOutput = document.getElementById('streamOutput').checked;
+                formData.append('stream_output', streamOutput);
+                
+                // 显示进度条
+                progressContainer.style.display = 'block';
+                uploadBtn.disabled = true;
+                dropZone.style.pointerEvents = 'none';
+                dropZone.style.opacity = '0.6';
+                
+                fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        if (data.stream_id) {
+                            // 流式输出模式，跳转到流式结果页面
+                            const params = new URLSearchParams({
+                                stream_id: data.stream_id,
+                                analysis_type: analysisType,
+                                original_name: data.original_name,
+                                model_name: modelName
+                            });
+                            
+                            if (jobRequirements) {
+                                params.append('job_requirements', jobRequirements);
+                            }
+                            
+                            window.location.href = `/stream-result?${params.toString()}`;
+                        } else {
+                            // 普通模式，直接跳转到结果页面
+                            updateProgress(100);
+                            setTimeout(() => {
+                                window.location.href = `/result/${data.filename}`;
+                            }, 500);
+                        }
+                    } else {
+                        showAlert(data.message || '上传失败', 'danger');
+                        resetProgress();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showAlert('上传失败，请重试', 'danger');
+                    resetProgress();
+                });
+            }
+            
+            function updateProgress(value) {
+                progressBar.style.width = `${value}%`;
+                progressText.textContent = `${Math.round(value)}%`;
+            }
+            
+            function resetProgress() {
+                progressContainer.style.display = 'none';
+                updateProgress(0);
+                uploadBtn.disabled = false;
+                dropZone.style.pointerEvents = '';
+                dropZone.style.opacity = '';
+            }
+            
+            function showAlert(message, type) {
+                alertBox.className = `alert alert-${type}`;
+                alertBox.textContent = message;
+                alertBox.style.display = 'block';
+            }
+            
+            function hideAlert() {
+                alertBox.style.display = 'none';
+            }
+            
+            // 加载最近分析结果
+            loadRecentResults();
+            
+            function loadRecentResults() {
+                fetch('/api/recent-results')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.length === 0) {
+                            recentResults.innerHTML = '<p class="text-center text-muted py-3">暂无分析记录</p>';
+                            return;
+                        }
+                        
+                        let html = '';
+                        data.forEach(item => {
+                            const date = new Date(item.modified_time * 1000);
+                            const formattedDate = date.toLocaleString('zh-CN');
+                            
+                            html += `
+                                <div class="history-item">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h5 class="mb-1">${item.original_name}</h5>
+                                            <p class="text-muted mb-0 small">${formattedDate}</p>
+                                        </div>
+                                        <a href="/result/${item.filename}" class="btn btn-sm btn-outline-primary">查看</a>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        
+                        recentResults.innerHTML = html;
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        recentResults.innerHTML = '<p class="text-center text-danger py-3">加载失败</p>';
+                    });
+            }
+            
+            // 添加清空文件按钮事件
+            clearFilesBtn.addEventListener('click', function() {
+                if (confirm('确定要清空所有上传和分析文件吗？此操作不可恢复。')) {
+                    clearAllFiles();
+                }
+            });
+            
+            function clearAllFiles() {
+                fetch('/api/clear-files', {
+                    method: 'POST'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showAlert('所有文件已清空', 'success');
+                        // 重新加载最近分析结果
+                        loadRecentResults();
+                    } else {
+                        showAlert(data.message || '清空文件失败', 'danger');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showAlert('清空文件失败，请重试', 'danger');
+                });
+            }
+        });
+    </script>
+</body>
+</html> 
