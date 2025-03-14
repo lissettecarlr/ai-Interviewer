@@ -54,9 +54,8 @@ python app.py
 
 * docker 启动：
 ```bash
-docker build -t resume-analysis .
-ocker run -d -p 30003:23333 -e OPENAI_KEY= -e OPENAI_BASE_URL=https://oneapi/v1 --name reresume resume-ana
-lysis
+docker build -t resume-analysis:v0.1 .
+ocker run -d -p 30003:23333 -e OPENAI_KEY= -e OPENAI_BASE_URL=https://oneapi/v1 --name reresume resume-analysis:v0.1
 ```
 
 * 访问：

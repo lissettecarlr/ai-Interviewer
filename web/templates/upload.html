@@ -407,6 +407,37 @@
                     showAlert('清空文件失败，请重试', 'danger');
                 });
             }
+
+            function handleModelChange() {
+                const modelSelect = document.getElementById('modelSelect');
+                const streamOutputCheck = document.getElementById('streamOutput');
+                const selectedOption = modelSelect.options[modelSelect.selectedIndex];
+                const modelId = selectedOption.value;
+                
+                // 查找所选模型是否支持流式传输
+                let streamSupport = true;
+                {% for model in models %}
+                if (modelId === "{{ model.id }}") {
+                    streamSupport = {{ model.stream_support|lower }};
+                }
+                {% endfor %}
+                
+                // 如果不支持流式传输，禁用复选框并显示提示
+                if (!streamSupport) {
+                    streamOutputCheck.checked = false;
+                    streamOutputCheck.disabled = true;
+                    streamOutputCheck.parentElement.setAttribute('title', '所选模型不支持流式传输');
+                    streamOutputCheck.parentElement.classList.add('text-muted');
+                } else {
+                    streamOutputCheck.disabled = false;
+                    streamOutputCheck.parentElement.removeAttribute('title');
+                    streamOutputCheck.parentElement.classList.remove('text-muted');
+                }
+            }
+
+            // 初始化和更改时都要检查
+            document.getElementById('modelSelect').addEventListener('change', handleModelChange);
+            handleModelChange(); // 初始检查
         });
     </script>
 </body>

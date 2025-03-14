@@ -13,9 +13,9 @@ app = Flask(__name__)
 
 # 添加可用模型配置
 app.config['AVAILABLE_MODELS'] = [
-    {"id": "gpt-4o", "name": "GPT-4o (默认)", "default": True},
-    {"id": "o1-preview", "name": "o1-preview (贵且慢，但是更准确)", "default": False},
-    {"id": "gpt-4-turbo", "name": "GPT-4 Turbo", "default": False},
+    {"id": "gpt-4o", "name": "GPT-4o (默认)", "default": True, "stream_support": True},
+    {"id": "o1-preview", "name": "o1-preview (贵且慢，但是更准确)", "default": False, "stream_support": False},
+    {"id": "gpt-4-turbo", "name": "GPT-4 Turbo", "default": False, "stream_support": True},
     # 可以在这里添加更多模型
 ]
 
@@ -48,9 +48,22 @@ def upload_file():
     
     # 获取分析类型
     analysis_type = request.form.get('analysis_type', 'general')
-    stream_output = request.form.get('stream_output', 'false').lower() == 'true'
+    
     # 获取模型参数
     model_name = request.form.get('model_name', 'gpt-4o')
+    
+    # 检查模型是否支持流式传输
+    model_stream_support = True
+    for model in app.config['AVAILABLE_MODELS']:
+        if model['id'] == model_name:
+            model_stream_support = model.get('stream_support', True)
+            break
+    
+    # 如果模型不支持流式传输，则强制使用非流式模式
+    if model_stream_support:
+        stream_output = request.form.get('stream_output', 'false').lower() == 'true'
+    else:
+        stream_output = False
     
     if file and allowed_file(file.filename):
         # 使用时间戳确保文件名唯一
@@ -96,7 +109,8 @@ def upload_file():
                     file_path=filepath, 
                     analysis_type=analysis_type, 
                     output_path=output_path,
-                    job_requirements=job_requirements
+                    job_requirements=job_requirements,
+                    model_name=model_name
                 )
                 
                 # 保存文件名映射
@@ -147,6 +161,20 @@ def stream_analysis(stream_id):
     analysis_type = request.args.get('analysis_type', 'general')
     job_requirements = request.args.get('job_requirements', '')
     
+    # 获取模型参数
+    model_name = request.args.get('model_name', 'gpt-4o')
+    
+    # 检查模型是否支持流式传输
+    model_stream_support = True
+    for model in app.config['AVAILABLE_MODELS']:
+        if model['id'] == model_name:
+            model_stream_support = model.get('stream_support', True)
+            break
+    
+    # 如果模型不支持流式传输，返回错误信息
+    if not model_stream_support:
+        return jsonify({'status': 'error', 'message': f'所选模型 {model_name} 不支持流式传输'}), 400
+    
     # 生成输出文件名
     output_filename = f"{filename_base}_{timestamp}.md"
     output_path = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
@@ -162,7 +190,8 @@ def stream_analysis(stream_id):
                 file_path=filepath,
                 analysis_type=analysis_type,
                 stream=True,
-                job_requirements=job_requirements
+                job_requirements=job_requirements,
+                model_name=model_name
             ):
                 full_content += chunk
                 yield f"data: {json.dumps({'chunk': chunk})}\n\n"
