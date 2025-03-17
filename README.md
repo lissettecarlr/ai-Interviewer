@@ -55,7 +55,7 @@ python app.py
 * docker 启动：
 ```bash
 docker build -t resume-analysis:v0.1 .
-ocker run -d -p 30003:23333 -e OPENAI_KEY= -e OPENAI_BASE_URL=https://oneapi/v1 --name reresume resume-analysis:v0.1
+ocker run -d -p 23333:23333 -e OPENAI_KEY= -e OPENAI_BASE_URL=https://oneapi/v1 --name reresume resume-analysis:v0.1
 ```
 
 * 访问：
@@ -64,6 +64,8 @@ http://127.0.0.1:23333/
 ```
 
 * 演示：
+    * 岗位需求，如果简历中有写目标岗位就可以不填。
+    * 实时显示分析结果，对于不支持流式的模型*o1*等，强制关闭。
 
 ![](./file/web1.gif)
 
